@@ -1,1 +1,1 @@
-"""Núcleo modular del Simulador Probabilístico Avanzado."""
+"""Módulos del simulador probabilístico."""
