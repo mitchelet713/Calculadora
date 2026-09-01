@@ -1,60 +1,52 @@
-"""Funciones puras para combinatoria e hipergeométrica multivariada."""
-from __future__ import annotations
-from fractions import Fraction
 from math import comb
-from typing import Dict, Iterable, Iterator, Mapping, Sequence, Tuple
-from .models import Condicion, cumplen_todas
+from .models import Condition, PopulationItem
 
-def combinaciones(n: int, k: int) -> int:
-    if n < 0 or k < 0 or k > n:
-        return 0
-    return comb(n, k)
 
-def probabilidad_vector(cantidades: Sequence[int], extracciones: Sequence[int]) -> Fraction:
-    if len(cantidades) != len(extracciones):
-        raise ValueError("Las cantidades y extracciones deben tener la misma longitud.")
-    denominador = combinaciones(sum(cantidades), sum(extracciones))
-    if denominador == 0:
-        return Fraction(0, 1)
-    numerador = 1
-    for cantidad, extraccion in zip(cantidades, extracciones):
-        numerador *= combinaciones(cantidad, extraccion)
-    return Fraction(numerador, denominador)
+def _category_totals(items: list[PopulationItem]) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for item in items:
+        totals[item.category] = totals.get(item.category, 0) + item.quantity
+    return totals
 
-def _vectores_factibles(cantidades: Sequence[int], muestra: int) -> Iterator[Tuple[int, ...]]:
-    if not cantidades:
-        if muestra == 0:
-            yield tuple()
-        return
-    sufijos = [0] * (len(cantidades) + 1)
-    for i in range(len(cantidades) - 1, -1, -1):
-        sufijos[i] = sufijos[i + 1] + cantidades[i]
-    def recorrer(i: int, restante: int, actual: list[int]) -> Iterator[Tuple[int, ...]]:
-        if i == len(cantidades) - 1:
-            if 0 <= restante <= cantidades[i]:
-                yield tuple(actual + [restante])
+
+def exact_probability(
+    items: list[PopulationItem], sample_size: int, conditions: list[Condition]
+) -> float:
+    """Probabilidad hipergeométrica multivariante para mínimos unidos por AND."""
+    population_size = sum(item.quantity for item in items)
+    if sample_size < 0 or sample_size > population_size:
+        raise ValueError("El tamaño de muestra debe estar entre 0 y el total poblacional.")
+
+    required: dict[str, int] = {}
+    for condition in conditions:
+        required[condition.category] = max(required.get(condition.category, 0), condition.minimum)
+
+    totals = _category_totals(items)
+    selected_categories = list(required)
+    if any(required[c] > totals.get(c, 0) for c in selected_categories):
+        return 0.0
+
+    other_total = population_size - sum(totals.get(c, 0) for c in selected_categories)
+    denominator = comb(population_size, sample_size)
+    if denominator == 0:
+        return 0.0
+
+    favorable = 0
+
+    def walk(index: int, chosen: int, ways: int) -> None:
+        nonlocal favorable
+        if index == len(selected_categories):
+            remaining = sample_size - chosen
+            if 0 <= remaining <= other_total:
+                favorable += ways * comb(other_total, remaining)
             return
-        minimo = max(0, restante - sufijos[i + 1])
-        maximo = min(cantidades[i], restante)
-        for valor in range(minimo, maximo + 1):
-            yield from recorrer(i + 1, restante - valor, actual + [valor])
-    if 0 <= muestra <= sum(cantidades):
-        yield from recorrer(0, muestra, [])
 
-def probabilidad_condiciones(cantidades_por_categoria: Mapping[str, int], muestra: int,
-                             condiciones: Iterable[Condicion]) -> Fraction:
-    condiciones = tuple(condiciones)
-    categorias = tuple(sorted(cantidades_por_categoria))
-    cantidades = tuple(int(cantidades_por_categoria[c]) for c in categorias)
-    denominador = combinaciones(sum(cantidades), muestra)
-    if denominador == 0:
-        return Fraction(0, 1)
-    favorables = 0
-    for vector in _vectores_factibles(cantidades, muestra):
-        conteos: Dict[str, int] = dict(zip(categorias, vector))
-        if cumplen_todas(conteos, condiciones):
-            maneras = 1
-            for cantidad, extraida in zip(cantidades, vector):
-                maneras *= combinaciones(cantidad, extraida)
-            favorables += maneras
-    return Fraction(favorables, denominador)
+        category = selected_categories[index]
+        available = totals.get(category, 0)
+        minimum = required[category]
+        maximum = min(available, sample_size - chosen)
+        for amount in range(minimum, maximum + 1):
+            walk(index + 1, chosen + amount, ways * comb(available, amount))
+
+    walk(0, 0, 1)
+    return favorable / denominator

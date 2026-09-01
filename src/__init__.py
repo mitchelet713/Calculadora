@@ -1,1 +1,1 @@
-"""Componentes de dominio de la aplicación de probabilidad."""
+"""Núcleo modular del Simulador Probabilístico Avanzado."""

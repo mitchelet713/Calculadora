@@ -1,30 +1,51 @@
-"""Funciones puras para simulación de extracciones sin reemplazo."""
-from __future__ import annotations
 import random
-from typing import Iterable, Mapping, Optional, Sequence, Tuple
-from .models import Condicion, Poblacion, cumplen_todas
+from .models import Condition, PopulationItem
 
-def expandir_poblacion(poblacion: Poblacion) -> Tuple[str, ...]:
-    return tuple(e.categoria for e in poblacion.elementos for _ in range(e.cantidad))
-def extraer_sin_reemplazo(poblacion: Sequence[str], muestra: int,
-                          generador: random.Random) -> list[str]:
-    if muestra < 0 or muestra > len(poblacion):
-        raise ValueError("El tamaño de muestra no es válido para la población.")
-    return generador.sample(poblacion, muestra)
-def contar_categorias(muestra: Iterable[str]) -> Mapping[str, int]:
-    conteos: dict[str, int] = {}
-    for categoria in muestra:
-        conteos[categoria] = conteos.get(categoria, 0) + 1
-    return conteos
-def simular_frecuencia(poblacion: Poblacion, muestra: int, condiciones: Iterable[Condicion],
-                       simulaciones: int, semilla: Optional[int] = None) -> Tuple[int, int, float]:
-    if simulaciones <= 0:
-        raise ValueError("La cantidad de simulaciones debe ser mayor que cero.")
-    expandida = expandir_poblacion(poblacion)
-    generador = random.Random(semilla)
-    condiciones = tuple(condiciones)
-    exitos = 0
-    for _ in range(simulaciones):
-        extraida = extraer_sin_reemplazo(expandida, muestra, generador)
-        exitos += int(cumplen_todas(contar_categorias(extraida), condiciones))
-    return exitos, simulaciones, exitos / simulaciones
+
+def _expanded_population(items: list[PopulationItem]) -> list[tuple[str, str]]:
+    return [
+        (item.name, item.category)
+        for item in items
+        for _ in range(item.quantity)
+    ]
+
+
+def run_simulations(
+    items: list[PopulationItem],
+    sample_size: int,
+    conditions: list[Condition],
+    simulations: int,
+    details_to_show: int,
+    seed: int | None = None,
+) -> tuple[float, int, list[dict]]:
+    population = _expanded_population(items)
+    if sample_size > len(population):
+        raise ValueError("La muestra no puede superar la población.")
+    if simulations <= 0:
+        raise ValueError("El número de simulaciones debe ser mayor que cero.")
+
+    rng = random.Random(seed)
+    successes = 0
+    details: list[dict] = []
+
+    for simulation_number in range(1, simulations + 1):
+        sample = rng.sample(population, sample_size)
+        category_counts: dict[str, int] = {}
+        for _, category in sample:
+            category_counts[category] = category_counts.get(category, 0) + 1
+        success = all(
+            category_counts.get(condition.category, 0) >= condition.minimum
+            for condition in conditions
+        )
+        successes += int(success)
+
+        if simulation_number <= details_to_show:
+            details.append(
+                {
+                    "Muestra": simulation_number,
+                    "Elementos obtenidos": ", ".join(name for name, _ in sample),
+                    "Éxito": "Sí" if success else "No",
+                }
+            )
+
+    return successes / simulations, successes, details

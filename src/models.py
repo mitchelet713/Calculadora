@@ -1,83 +1,33 @@
-"""Modelos de datos para poblaciones finitas y condiciones estadísticas."""
-from __future__ import annotations
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Dict, Iterable, Mapping, Optional, Tuple
 
-class Operador(str, Enum):
-    IGUAL = "="
-    MAYOR_IGUAL = ">="
-    MENOR_IGUAL = "<="
-    RANGO = "RANGO"
 
 @dataclass(frozen=True)
-class Categoria:
-    nombre: str
+class PopulationItem:
+    name: str
+    quantity: int
+    category: str = "Sin clasificar"
+
     def __post_init__(self) -> None:
-        if not self.nombre.strip():
-            raise ValueError("El nombre de la categoría no puede estar vacío.")
+        if not self.name.strip():
+            raise ValueError("El nombre no puede estar vacío.")
+        if self.quantity <= 0:
+            raise ValueError("La cantidad debe ser mayor que cero.")
+
 
 @dataclass(frozen=True)
-class Elemento:
-    nombre: str
-    cantidad: int
-    categoria: str
+class Condition:
+    category: str
+    minimum: int
+
     def __post_init__(self) -> None:
-        if not self.nombre.strip():
-            raise ValueError("El nombre del elemento no puede estar vacío.")
-        if not self.categoria.strip():
-            raise ValueError("La categoría no puede estar vacía.")
-        if isinstance(self.cantidad, bool) or not isinstance(self.cantidad, int) or self.cantidad < 0:
-            raise ValueError("La cantidad debe ser un entero mayor o igual que cero.")
+        if self.minimum < 0:
+            raise ValueError("El mínimo no puede ser negativo.")
 
-@dataclass(frozen=True)
-class Poblacion:
-    elementos: Tuple[Elemento, ...] = field(default_factory=tuple)
-    @classmethod
-    def desde_iterable(cls, elementos: Iterable[Elemento]) -> "Poblacion":
-        return cls(tuple(elementos))
-    @property
-    def total(self) -> int:
-        return sum(e.cantidad for e in self.elementos)
-    @property
-    def elementos_unicos(self) -> int:
-        return sum(1 for e in self.elementos if e.cantidad > 0)
-    @property
-    def categorias(self) -> Tuple[str, ...]:
-        return tuple(sorted({e.categoria for e in self.elementos if e.cantidad > 0}))
-    def cantidades_por_categoria(self) -> Dict[str, int]:
-        resultado: Dict[str, int] = {}
-        for elemento in self.elementos:
-            resultado[elemento.categoria] = resultado.get(elemento.categoria, 0) + elemento.cantidad
-        return resultado
 
-@dataclass(frozen=True)
-class Condicion:
-    categoria: str
-    operador: Operador
-    valor: int
-    valor_maximo: Optional[int] = None
-    def __post_init__(self) -> None:
-        if not self.categoria.strip():
-            raise ValueError("La categoría de la condición no puede estar vacía.")
-        if isinstance(self.valor, bool) or not isinstance(self.valor, int) or self.valor < 0:
-            raise ValueError("El valor debe ser un entero mayor o igual que cero.")
-        if self.operador == Operador.RANGO:
-            if self.valor_maximo is None or not isinstance(self.valor_maximo, int):
-                raise ValueError("Una condición de rango requiere un máximo entero.")
-            if self.valor_maximo < self.valor:
-                raise ValueError("El máximo del rango no puede ser menor que el mínimo.")
-    def cumple(self, cantidad_observada: int) -> bool:
-        if self.operador == Operador.IGUAL:
-            return cantidad_observada == self.valor
-        if self.operador == Operador.MAYOR_IGUAL:
-            return cantidad_observada >= self.valor
-        if self.operador == Operador.MENOR_IGUAL:
-            return cantidad_observada <= self.valor
-        if self.operador == Operador.RANGO:
-            return self.valor <= cantidad_observada <= int(self.valor_maximo)
-        return False
-
-def cumplen_todas(conteos: Mapping[str, int], condiciones: Iterable[Condicion]) -> bool:
-    """Aplica AND lógico entre todas las condiciones."""
-    return all(c.cumple(int(conteos.get(c.categoria, 0))) for c in condiciones)
+@dataclass
+class AnalysisResult:
+    exact_probability: float
+    empirical_frequency: float
+    successes: int
+    simulation_count: int
+    detailed_samples: list[dict] = field(default_factory=list)
