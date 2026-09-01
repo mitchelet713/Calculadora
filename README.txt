@@ -1,9 +1,6 @@
-SIMULADOR PROBABILÍSTICO AVANZADO
+SIMULADOR PROBABILÍSTICO AVANZADO V2.1
 
-1. Instala dependencias:
-   pip install -r requirements.txt
+Instalación: pip install -r requirements.txt
+Ejecución: streamlit run app.py
 
-2. Ejecuta desde esta carpeta:
-   streamlit run app.py
-
-La aplicación implementa un flujo de tres pasos, cálculo hipergeométrico exacto multivariante para condiciones mínimas acumulativas y simulación aleatoria sin reemplazo.
+Incluye condiciones por categoría con valores mínimo y máximo, cálculo hipergeométrico exacto y simulación sin reemplazo.

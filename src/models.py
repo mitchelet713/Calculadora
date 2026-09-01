@@ -1,28 +1,22 @@
 from dataclasses import dataclass, field
 
-
 @dataclass(frozen=True)
 class PopulationItem:
     name: str
     quantity: int
     category: str = "Sin clasificar"
-
-    def __post_init__(self) -> None:
-        if not self.name.strip():
-            raise ValueError("El nombre no puede estar vacío.")
-        if self.quantity <= 0:
-            raise ValueError("La cantidad debe ser mayor que cero.")
-
+    def __post_init__(self):
+        if not self.name.strip(): raise ValueError("El nombre no puede estar vacío.")
+        if self.quantity <= 0: raise ValueError("La cantidad debe ser mayor que cero.")
 
 @dataclass(frozen=True)
 class Condition:
     category: str
     minimum: int
-
-    def __post_init__(self) -> None:
-        if self.minimum < 0:
-            raise ValueError("El mínimo no puede ser negativo.")
-
+    maximum: int
+    def __post_init__(self):
+        if self.minimum < 0: raise ValueError("El mínimo no puede ser negativo.")
+        if self.maximum < self.minimum: raise ValueError("El máximo no puede ser menor que el mínimo.")
 
 @dataclass
 class AnalysisResult:
