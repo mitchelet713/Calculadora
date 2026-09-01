@@ -1,1 +1,1 @@
-"""Nucleo de calculo y simulacion de la aplicacion."""
+"""Componentes de dominio de la aplicación de probabilidad."""

@@ -1,15 +1,12 @@
-"""Validaciones y orquestación independientes de Streamlit."""
-
+"""Parseo, validaciones y orquestación de resultados."""
 from __future__ import annotations
-
+import re
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
-
 from .math_engine import probabilidad_condiciones
 from .models import Condicion, Elemento, Operador, Poblacion
 from .sim_engine import simular_frecuencia
-
 
 @dataclass(frozen=True)
 class ResultadoCalculo:
@@ -17,31 +14,39 @@ class ResultadoCalculo:
     exitos_simulados: int
     simulaciones: int
     frecuencia_empirica: float
-
     @property
     def probabilidad_decimal(self) -> float:
         return float(self.probabilidad_exacta)
 
+def separar_valores(texto: str) -> Tuple[str, ...]:
+    """Separa líneas, comas o punto y coma; elimina vacíos y duplicados conservando orden."""
+    candidatos = re.split(r"[\n,;]+", texto)
+    vistos: set[str] = set()
+    resultado = []
+    for candidato in candidatos:
+        valor = candidato.strip()
+        clave = valor.casefold()
+        if valor and clave not in vistos:
+            vistos.add(clave)
+            resultado.append(valor)
+    return tuple(resultado)
 
 def construir_poblacion(filas: Sequence[Mapping[str, Any]]) -> Poblacion:
     elementos = []
     for numero, fila in enumerate(filas, start=1):
         nombre = str(fila.get("Elemento", "")).strip()
         categoria = str(fila.get("Categoría", "")).strip()
-        cantidad_bruta = fila.get("Cantidad", 0)
-        fila_vacia = not nombre and not categoria and (cantidad_bruta in (None, "", 0, 0.0))
-        if fila_vacia:
-            continue
         try:
-            cantidad_float = float(cantidad_bruta)
-            cantidad = int(cantidad_float)
+            numero_float = float(fila.get("Cantidad", 0))
+            cantidad = int(numero_float)
         except (TypeError, ValueError):
             raise ValueError(f"Fila {numero}: la cantidad debe ser un entero.") from None
-        if cantidad != cantidad_float:
+        if cantidad != numero_float:
             raise ValueError(f"Fila {numero}: la cantidad debe ser un entero.")
-        elementos.append(Elemento(nombre=nombre, cantidad=cantidad, categoria=categoria))
+        elementos.append(Elemento(nombre, cantidad, categoria))
+    if not elementos:
+        raise ValueError("Debe existir al menos un elemento.")
     return Poblacion.desde_iterable(elementos)
-
 
 def construir_condiciones(filas: Sequence[Mapping[str, Any]]) -> Tuple[Condicion, ...]:
     condiciones = []
@@ -49,40 +54,32 @@ def construir_condiciones(filas: Sequence[Mapping[str, Any]]) -> Tuple[Condicion
         categoria = str(fila.get("Categoría", "")).strip()
         if not categoria:
             continue
-        operador_texto = str(fila.get("Operador", "=")).strip()
-        operador = Operador(operador_texto)
-        valor = int(fila.get("Valor", 0))
-        maximo_bruto = fila.get("Máximo")
-        maximo = int(maximo_bruto) if operador == Operador.RANGO and maximo_bruto is not None else None
+        try:
+            operador = Operador(str(fila.get("Operador", "=")).strip())
+            valor = int(float(fila.get("Valor", 0)))
+            maximo_bruto = fila.get("Máximo")
+            maximo = int(float(maximo_bruto)) if operador == Operador.RANGO and maximo_bruto not in (None, "") else None
+        except (ValueError, TypeError):
+            raise ValueError(f"Condición {numero}: revise operador y cantidades.") from None
         condiciones.append(Condicion(categoria, operador, valor, maximo))
     return tuple(condiciones)
 
-
-def validar_configuracion(poblacion: Poblacion, tamano_muestra: int, condiciones: Iterable[Condicion]) -> None:
+def validar_configuracion(poblacion: Poblacion, muestra: int, condiciones: Iterable[Condicion]) -> None:
     condiciones = tuple(condiciones)
     if poblacion.total <= 0:
-        raise ValueError("La población debe contener al menos una unidad.")
-    if tamano_muestra < 0 or tamano_muestra > poblacion.total:
+        raise ValueError("La población total debe ser mayor que cero.")
+    if not 0 <= muestra <= poblacion.total:
         raise ValueError("El tamaño de muestra debe estar entre cero y el total de la población.")
     if not condiciones:
         raise ValueError("Debe definir al menos una condición.")
-    categorias = set(poblacion.categorias)
-    desconocidas = sorted({c.categoria for c in condiciones} - categorias)
+    desconocidas = sorted({c.categoria for c in condiciones} - set(poblacion.categorias))
     if desconocidas:
-        raise ValueError("Hay condiciones con categorías inexistentes: " + ", ".join(desconocidas))
+        raise ValueError("Categorías inexistentes en las condiciones: " + ", ".join(desconocidas))
 
-
-def ejecutar_calculo(
-    poblacion: Poblacion,
-    tamano_muestra: int,
-    condiciones: Iterable[Condicion],
-    simulaciones: int,
-    semilla: Optional[int] = None,
-) -> ResultadoCalculo:
+def ejecutar_calculo(poblacion: Poblacion, muestra: int, condiciones: Iterable[Condicion],
+                     simulaciones: int, semilla: Optional[int] = None) -> ResultadoCalculo:
     condiciones = tuple(condiciones)
-    validar_configuracion(poblacion, tamano_muestra, condiciones)
-    exacta = probabilidad_condiciones(poblacion.cantidades_por_categoria(), tamano_muestra, condiciones)
-    exitos, total, empirica = simular_frecuencia(
-        poblacion, tamano_muestra, condiciones, simulaciones, semilla
-    )
+    validar_configuracion(poblacion, muestra, condiciones)
+    exacta = probabilidad_condiciones(poblacion.cantidades_por_categoria(), muestra, condiciones)
+    exitos, total, empirica = simular_frecuencia(poblacion, muestra, condiciones, simulaciones, semilla)
     return ResultadoCalculo(exacta, exitos, total, empirica)
